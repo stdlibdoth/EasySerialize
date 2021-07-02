@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using EasySave;
 
-[AllowNestedSerialization(3)]
+[AllowNestedSerialization(10)]
 public class TestObject : MonoBehaviour
 {
     [System.Serializable]
@@ -25,7 +25,7 @@ public class TestObject : MonoBehaviour
     //[Savable] public string m_string2;
     //private string m_string3;
     //[Savable] private string m_string4;
-    [Savable]private TestObj m_tObject;
+    [Savable]public TestObj m_tObject;
 
     [SerializeField] private TestObj m_ref;
 
@@ -39,7 +39,7 @@ public class TestObject : MonoBehaviour
     [Savable] public string m_string7;
     [Savable] public string m_string8;
     [Savable] public string m_string9;
-    [Savable] public string m_string0;
+    public string m_string0;
     [Savable] public string m_string56;
     [Savable] public string m_stri4567ng;
     [Savable] public string m_strewgi4567ng;

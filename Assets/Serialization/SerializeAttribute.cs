@@ -9,7 +9,6 @@ namespace EasySave
     public class Savable : Attribute
     {
         public readonly string serializer;
-
         public Savable(string serializer = "BasicSerializer")
         {
             this.serializer = serializer;
@@ -20,12 +19,10 @@ namespace EasySave
     public class AllowNestedSerialization : Attribute
     {
         public readonly int depth;
-
         public AllowNestedSerialization(int depth = 2)
         {
             this.depth = depth;
         }
-
     }
 }
 
