@@ -99,7 +99,6 @@ public class FlatTextFormatter : MonoBehaviour, IFormatter
             }
         }
     }
-
     public void Load(object[] objs, LoadOption loadOption= LoadOption.NoDuplication)
     {
         m_loadedObjectIdMap.Clear();
