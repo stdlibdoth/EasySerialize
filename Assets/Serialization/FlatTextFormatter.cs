@@ -7,6 +7,8 @@ using EasySave;
 using System.Threading.Tasks;
 using System.Diagnostics;
 using System.IO;
+using System.Threading;
+using System.Collections.Concurrent;
 
 public class FlatTextFormatter : MonoBehaviour, IFormatter
 {
@@ -23,21 +25,21 @@ public class FlatTextFormatter : MonoBehaviour, IFormatter
     private Dictionary<string, FlatTextElement> m_loadedIdElementMap = new Dictionary<string, FlatTextElement>();
 
     private string m_output;
+    private Mutex m_mut;
     private bool m_generationFlag = false;
 
+
+    private ConcurrentQueue<Action> m_updateActions = new ConcurrentQueue<Action>();
+    private Action<string> m_postOutputAction;
+    private int m_taskCount;
 
     #region IFormatter Implementation
 
     public void GenerateOutputAsync(Action<string> callback)
     {
-        if (m_generationFlag)
-            return;
-        Action<Task> postGeneration = (a) => { callback.Invoke(m_output); };
-        Task t = new Task(() => {
-            GenerateOutput();
-        });
-        t.Start();
-        t.ContinueWith(postGeneration);
+        m_mut = new Mutex();
+        m_postOutputAction = callback;
+        GenerateOutput();
     }
     public void Register<T>(object obj) where T : SerializedElement
     {
@@ -145,23 +147,51 @@ public class FlatTextFormatter : MonoBehaviour, IFormatter
 
     private void GenerateOutput()
     {
-        m_generationFlag = true;
-        Stopwatch stopwatch = new Stopwatch();
-        stopwatch.Start();
         m_output = "";
-        foreach (var obj in m_saveObjectIdMap.Keys)
+        m_taskCount = 0;
+        int chunkCount = 500;
+
+        List<object> objects = new List<object>(m_saveObjectIdMap.Keys);
+        int eCountRemainder = objects.Count % chunkCount;
+        int taskCount = eCountRemainder == 0 ? objects.Count / chunkCount : objects.Count / chunkCount + 1;
+
+        m_generationFlag = true;
+        for (int i = 0; i < taskCount; i++)
         {
-            if (obj == null)
-                continue;
-            string id = m_saveObjectIdMap[obj];
-            FlatTextElement element = m_idElementMap[id];
-            string header = "<#" + element.id + ">";
-            m_output += header + "\n" + element.ConvertToString();
-            m_output += "</#>" + "\n";
+            int length = (i == taskCount - 1) ? eCountRemainder : chunkCount;
+            List<object> objs = objects.GetRange(i * chunkCount, length);
+            Task task = new Task(() => SerializeElements(objs));
+            m_taskCount++;
+            task.Start();
         }
-        print(stopwatch.ElapsedMilliseconds);
-        m_generationFlag = false;
     }
+
+    private void SerializeElements(List<object> objs)
+    {
+        string output = "";
+        for (int i = 0; i < objs.Count; i++)
+        {
+            object obj = objs[i];
+            if (obj != null)
+            {
+                string id = m_saveObjectIdMap[obj];
+                FlatTextElement element = m_idElementMap[id];
+                string header = "<#" + element.id + ">";
+                output += header + "\n" + element.ConvertToString();
+                output += "</#>" + "\n";
+            }
+        }
+        m_updateActions.Enqueue(()=> UpdateOutputString(output));
+    }
+
+    private void UpdateOutputString(string input)
+    {
+        m_mut.WaitOne();
+        m_output += input;
+        m_taskCount--;
+        m_mut.ReleaseMutex();
+    }
+
 
     private void RegisterElement(object obj, int depth, int element_id)
     {
@@ -208,6 +238,26 @@ public class FlatTextFormatter : MonoBehaviour, IFormatter
     #endregion
 
 
+    #region Mono
+
+    private void Update()
+    {
+        if (m_generationFlag && m_updateActions.Count > 0)
+        {
+            if (m_updateActions.TryDequeue(out Action action))
+            {
+                action.Invoke();
+            }
+        }
+        if (m_taskCount == 0&& m_generationFlag)
+        {
+            m_postOutputAction.Invoke(m_output);
+            m_generationFlag = false;
+            m_mut.Dispose();
+        }
+    }
+
+    #endregion
 
 
 
